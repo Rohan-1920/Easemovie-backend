@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Easemovie-backend root (parent of `app/`)
@@ -17,10 +18,13 @@ class Settings(BaseSettings):
     # Firebase Admin SDK JSON path (relative to BACKEND_ROOT or absolute)
     firebase_credentials_path: str = ""
     firestore_projects_collection: str = "projects"
+    # Set SKIP_FIRESTORE_STARTUP=true for pytest / local runs without Firebase credentials.
+    skip_firestore_startup: bool = Field(default=False)
 
     model_config = SettingsConfigDict(
         env_file=(".env", "app/.env"),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
 

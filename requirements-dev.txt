@@ -1,0 +1,2 @@
+# Development & automated checks (final-year demos / CI-friendly)
+pytest>=8.0.0

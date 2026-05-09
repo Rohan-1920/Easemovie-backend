@@ -34,6 +34,11 @@ def init_firestore() -> None:
 
 
 def _collection():
+    if not firebase_admin._apps:
+        raise RuntimeError(
+            "Firestore is not initialized. Configure FIREBASE_CREDENTIALS_PATH "
+            "and ensure SKIP_FIRESTORE_STARTUP is not enabled."
+        )
     return firestore.client().collection(settings.firestore_projects_collection)
 
 

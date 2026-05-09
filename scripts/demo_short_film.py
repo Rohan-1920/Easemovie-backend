@@ -1,10 +1,10 @@
 """
 Short film demo: segment -> generate_image per scene -> compose_film (voice).
 
-Pehle backend chalao:
+Start the backend first:
   uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-Phir:
+Then run:
   python scripts/demo_short_film.py
 """
 
@@ -56,8 +56,8 @@ def main() -> int:
         with urllib.request.urlopen(f"{BASE}/health", timeout=5) as r:
             print(r.read().decode())
     except urllib.error.URLError as e:
-        print(f"Backend reachable nahi: {e}", file=sys.stderr)
-        print(f"Pehle run karo: uvicorn app.main:app --host 0.0.0.0 --port 8000", file=sys.stderr)
+        print(f"Backend not reachable: {e}", file=sys.stderr)
+        print("Start it with: uvicorn app.main:app --host 0.0.0.0 --port 8000", file=sys.stderr)
         return 1
 
     print("2) Segment...")
@@ -65,7 +65,7 @@ def main() -> int:
     scenes = seg["scenes"]
     print(json.dumps(seg, indent=2))
 
-    print("3) Images (har scene)...")
+    print("3) Images (per scene)...")
     urls: list[str] = []
     for sc in scenes[:5]:
         mood = sc.get("mood") or "neutral"
@@ -97,7 +97,7 @@ def main() -> int:
     )
     print("\n=== FINAL SAMPLE ===")
     print(json.dumps(film, indent=2))
-    print("\nBrowser mein video kholo:", film["video_url"])
+    print("\nOpen this URL in your browser to watch the video:", film["video_url"])
     return 0
 
 

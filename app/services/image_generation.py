@@ -13,7 +13,7 @@ async def generate_image_file(prompt: str, style: str, emotion: str, output_path
             output_path.write_bytes(image_bytes)
             return
         except Exception:
-            # Stability call fail ho to request fail na ho; local fallback image return karo.
+            # If Stability fails, fall back to a locally rendered placeholder image.
             pass
     _create_fallback_image(output_path, f"{style} | {emotion}\n{prompt[:120]}", 1024, 1024)
 

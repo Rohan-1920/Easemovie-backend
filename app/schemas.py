@@ -32,7 +32,7 @@ class VideoResponse(BaseModel):
 
 
 class VideoFromImagesRequest(BaseModel):
-    """Pehle har scene ki image generate ho chuki ho — URL list se video stitch hoti hai."""
+    """Build a slideshow video from scene image URLs (images must already exist)."""
 
     image_urls: list[str] = Field(..., min_length=1)
     seconds_per_scene: float = Field(default=3.0, gt=0, le=60)
@@ -49,8 +49,8 @@ class VoiceResponse(BaseModel):
 
 class ComposeFilmRequest(BaseModel):
     """
-    Short film: images slideshow + optional narration (full ya per-scene).
-    Dono narration modes ek saath mat bhejo.
+    Short film: image slideshow plus optional narration (single block or per-scene lines).
+    Do not send both narration modes at once.
     """
 
     image_urls: list[str] = Field(..., min_length=1)
@@ -64,7 +64,7 @@ class ComposeFilmRequest(BaseModel):
         has_text = bool(self.narration_text and self.narration_text.strip())
         has_scenes = bool(self.scene_narrations)
         if has_text and has_scenes:
-            raise ValueError("sirf ek choose karo: narration_text ya scene_narrations.")
+            raise ValueError("Use either narration_text or scene_narrations, not both.")
         return self
 
 

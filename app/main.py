@@ -14,7 +14,7 @@ from app.services.storage import MEDIA_ROOT, ensure_media_dirs
 
 app = FastAPI(
     title=settings.app_name,
-    version="1.1.0",
+    version="1.2.0",
     description="Modular backend API for Easemovie story-to-animation workflow.",
 )
 app.add_middleware(
@@ -24,7 +24,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# StaticFiles mount se pehle media folders ensure honay chahiye.
+# Ensure media directories exist before mounting StaticFiles.
 ensure_media_dirs()
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 app.include_router(generation_router)
@@ -34,7 +34,8 @@ app.include_router(projects_router)
 @app.on_event("startup")
 def startup() -> None:
     ensure_media_dirs()
-    init_firestore()
+    if not settings.skip_firestore_startup:
+        init_firestore()
 
 
 @app.get("/health")

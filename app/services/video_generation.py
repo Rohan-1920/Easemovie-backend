@@ -46,7 +46,7 @@ def generate_video_from_image_urls(
     height: int = 720,
     target_fps: int = 24,
 ) -> None:
-    """Har scene ki image URL se slideshow MP4 banata hai (real visuals)."""
+    """Build an MP4 slideshow from scene image URLs (decoded visuals per scene)."""
     if seconds_per_image <= 0:
         seconds_per_image = 3.0
     frames: list[np.ndarray] = []

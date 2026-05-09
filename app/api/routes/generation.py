@@ -98,7 +98,7 @@ async def compose_film(payload: ComposeFilmRequest, request: Request) -> VideoRe
         if len(payload.scene_narrations) != len(payload.image_urls):
             raise HTTPException(
                 status_code=400,
-                detail="scene_narrations ki length image_urls ke barabar honi chahiye.",
+                detail="scene_narrations must have the same length as image_urls.",
             )
 
     has_full = bool(payload.narration_text and payload.narration_text.strip())
