@@ -1,0 +1,29 @@
+# Env & secrets
+.env
+app/.env
+**/firebase*-adminsdk*.json
+**/firebase-service-account*.json
+*-firebase-adminsdk-*.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Runtime outputs (do not push generated media)
+media/
+*.db
+easemovie.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
