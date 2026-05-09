@@ -26,6 +26,8 @@ class VideoRequest(BaseModel):
     scenes: list[str]
     style: str
 
+    model_config = {"json_schema_extra": {"examples": [{"scenes": ["Scene 1 text", "Scene 2 text"], "style": "Cinematic"}]}}
+
 
 class VideoResponse(BaseModel):
     video_url: str
@@ -37,10 +39,14 @@ class VideoFromImagesRequest(BaseModel):
     image_urls: list[str] = Field(..., min_length=1)
     seconds_per_scene: float = Field(default=3.0, gt=0, le=60)
 
+    model_config = {"json_schema_extra": {"examples": [{"image_urls": ["http://127.0.0.1:8000/media/images/scene1.png", "http://127.0.0.1:8000/media/images/scene2.png"], "seconds_per_scene": 3.0}]}}
+
 
 class VoiceRequest(BaseModel):
     text: str = Field(..., min_length=1)
     voice: str = Field(default="en-US-JennyNeural")
+
+    model_config = {"json_schema_extra": {"examples": [{"text": "Hello world", "voice": "en-US-AriaRUS"}]}}
 
 
 class VoiceResponse(BaseModel):
@@ -58,6 +64,41 @@ class ComposeFilmRequest(BaseModel):
     narration_text: str | None = None
     scene_narrations: list[str] | None = None
     voice: str = Field(default="en-US-JennyNeural")
+
+    # Optional project metadata to save generated content into Firestore.
+    user_id: str | None = None
+    title: str | None = None
+    style: str | None = None
+    thumbnail_url: str | None = None
+    scenes: list[str] | None = None
+    save_project: bool = Field(default=False)
+
+    model_config = {"json_schema_extra": {"examples": [
+        {
+            "image_urls": ["http://127.0.0.1:8000/media/images/scene1.png", "http://127.0.0.1:8000/media/images/scene2.png"],
+            "seconds_per_scene": 4.0,
+            "narration_text": "Once upon a time...",
+            "voice": "en-US-AriaRUS",
+            "user_id": "user123",
+            "title": "Fairy Tale Adventure",
+            "style": "Whimsical 3D",
+            "thumbnail_url": "http://127.0.0.1:8000/media/images/thumb.png",
+            "scenes": ["Scene one text", "Scene two text"],
+            "save_project": True
+        },
+        {
+            "image_urls": ["http://127.0.0.1:8000/media/images/scene1.png", "http://127.0.0.1:8000/media/images/scene2.png"],
+            "seconds_per_scene": 4.0,
+            "scene_narrations": ["Narration for scene 1", "Narration for scene 2"],
+            "voice": "en-US-AriaRUS",
+            "user_id": "user123",
+            "title": "Fairy Tale Adventure",
+            "style": "Whimsical 3D",
+            "thumbnail_url": "http://127.0.0.1:8000/media/images/thumb.png",
+            "scenes": ["Scene one text", "Scene two text"],
+            "save_project": True
+        }
+    ]}}
 
     @model_validator(mode="after")
     def narration_exclusive(self) -> ComposeFilmRequest:
@@ -80,3 +121,26 @@ class ProjectCreate(BaseModel):
 class ProjectOut(ProjectCreate):
     id: str
     created_at: str
+
+
+class UserCreate(BaseModel):
+    email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=6)
+    name: str | None = None
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    name: str | None = None
+    created_at: str
+
+
+class SignInRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes.auth import router as auth_router
 from app.api.routes.generation import router as generation_router
 from app.api.routes.projects import router as projects_router
 from app.core.config import settings
@@ -27,6 +28,7 @@ app.add_middleware(
 # Ensure media directories exist before mounting StaticFiles.
 ensure_media_dirs()
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
+app.include_router(auth_router)
 app.include_router(generation_router)
 app.include_router(projects_router)
 

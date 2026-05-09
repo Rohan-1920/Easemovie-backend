@@ -18,8 +18,12 @@ class Settings(BaseSettings):
     # Firebase Admin SDK JSON path (relative to BACKEND_ROOT or absolute)
     firebase_credentials_path: str = ""
     firestore_projects_collection: str = "projects"
+    firestore_users_collection: str = "users"
     # Set SKIP_FIRESTORE_STARTUP=true for pytest / local runs without Firebase credentials.
     skip_firestore_startup: bool = Field(default=False)
+    jwt_secret_key: str = "your-secret-key-here"  # Change in production
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
 
     model_config = SettingsConfigDict(
         env_file=(".env", "app/.env"),
