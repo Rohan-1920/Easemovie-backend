@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     stability_base_url: str = "https://api.stability.ai/v2beta/stable-image/generate/core"
 
     # Firebase Admin SDK JSON path (relative to BACKEND_ROOT or absolute)
-    firebase_credentials_path: str = ""
+    firebase_credentials_path: str = Field(
+        "",
+        env=("FIREBASE_CREDENTIALS_PATH", "FIREBASE_CREDENTIALS_PATH_ALT"),
+    )
     firestore_projects_collection: str = "projects"
     firestore_users_collection: str = "users"
     # Set SKIP_FIRESTORE_STARTUP=true for pytest / local runs without Firebase credentials.
