@@ -6,6 +6,7 @@ import imageio.v2 as imageio
 import numpy as np
 from PIL import Image, ImageDraw
 
+from app.services.image_generation import pil_image_to_rgb_opaque
 from app.services.storage import MEDIA_ROOT
 
 
@@ -28,13 +29,15 @@ def _load_rgb_image(url: str, client: httpx.Client) -> Image.Image:
             except ValueError as exc:
                 raise ValueError("Invalid media URL path.") from exc
             if local.is_file():
-                return Image.open(local).convert("RGB")
+                with Image.open(local) as opened:
+                    return pil_image_to_rgb_opaque(opened)
 
     response = client.get(stripped)
     response.raise_for_status()
     if len(response.content) > 15 * 1024 * 1024:
         raise ValueError(f"Image too large from URL: {stripped[:80]}")
-    return Image.open(io.BytesIO(response.content)).convert("RGB")
+    with Image.open(io.BytesIO(response.content)) as opened:
+        return pil_image_to_rgb_opaque(opened)
 
 
 def generate_video_from_image_urls(
