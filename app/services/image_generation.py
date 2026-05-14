@@ -36,21 +36,25 @@ def _normalize_png_bytes(raw: bytes) -> bytes:
 
 
 async def generate_image_file(prompt: str, style: str, emotion: str, output_path: Path) -> None:
-    if settings.stability_api_key:
-        try:
-            image_bytes = await _generate_with_stability(prompt, style, emotion)
-            output_path.write_bytes(image_bytes)
-            return
-        except Exception as e:
-            # Log the error for debugging
-            logger.error(f"Stability AI image generation failed: {str(e)}", exc_info=True)
+    key = (settings.stability_api_key or "").strip()
+    if not key:
+        logger.warning("STABILITY_API_KEY is empty — serving fallback placeholder (no Stability call)")
+        _create_fallback_image(output_path, f"{style} | {emotion}\n{prompt[:120]}", 1024, 1024)
+        return
+    try:
+        image_bytes = await _generate_with_stability(prompt, style, emotion)
+        output_path.write_bytes(image_bytes)
+        return
+    except Exception as e:
+        logger.error(f"Stability AI image generation failed: {str(e)}", exc_info=True)
+    logger.warning("Using fallback placeholder image after Stability failure")
     _create_fallback_image(output_path, f"{style} | {emotion}\n{prompt[:120]}", 1024, 1024)
 
 
 async def _generate_with_stability(prompt: str, style: str, emotion: str) -> bytes:
-    # First, validate the API key by checking account balance
-    await _validate_api_key()
-    
+    # Optional: log balance; must not block generation (endpoint can 403/404 for some keys).
+    await _log_stability_balance_optional()
+
     # SD3 stable-image expects multipart or url-encoded form fields (see Stability docs / examples).
     # Sending JSON alone can return 200 with an empty or incorrect render for some accounts.
     headers = {
@@ -79,6 +83,15 @@ async def _generate_with_stability(prompt: str, style: str, emotion: str) -> byt
                 data=form,
             )
             logger.info(f"Stability API response status: {response.status_code}")
+            if response.status_code == 400 and "style_preset" in form:
+                logger.warning("SD3 returned 400; retrying without style_preset")
+                form_retry = {k: v for k, v in form.items() if k != "style_preset"}
+                response = await client.post(
+                    api_url,
+                    headers=headers,
+                    data=form_retry,
+                )
+                logger.info(f"Stability API retry status: {response.status_code}")
         except httpx.TimeoutException as e:
             logger.error(f"Stability API timeout: {str(e)}")
             raise RuntimeError(f"Stability API timeout: {str(e)}")
@@ -129,13 +142,12 @@ async def _generate_with_stability(prompt: str, style: str, emotion: str) -> byt
         return response.content
 
 
-async def _validate_api_key():
-    """Validate the API key by checking account balance"""
+async def _log_stability_balance_optional() -> None:
+    """Best-effort balance check; never raises — a failing balance URL must not force fallback PNG."""
     headers = {
         "Authorization": f"Bearer {settings.stability_api_key}",
         "Accept": "application/json",
     }
-    
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             response = await client.get(
@@ -144,14 +156,18 @@ async def _validate_api_key():
             )
             if response.status_code == 200:
                 balance_data = response.json()
-                logger.info(f"API Key valid. Credits: {balance_data.get('credits', 'unknown')}")
-                return True
+                logger.info(
+                    "Stability balance OK. credits=%s",
+                    balance_data.get("credits", "unknown"),
+                )
             else:
-                logger.error(f"API Key validation failed: {response.status_code} - {response.text}")
-                raise RuntimeError(f"Invalid API key: {response.text}")
+                logger.warning(
+                    "Stability balance check non-200 (%s), continuing anyway: %s",
+                    response.status_code,
+                    response.text[:300],
+                )
         except Exception as e:
-            logger.error(f"API Key validation error: {str(e)}")
-            raise RuntimeError(f"API Key validation failed: {str(e)}")
+            logger.warning("Stability balance check skipped: %s", e)
 
 
 def _create_fallback_image(output_path: Path, text: str, width: int, height: int) -> None:
