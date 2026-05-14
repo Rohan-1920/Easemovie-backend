@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     port: int = 8000
     media_root: str = "media"
     stability_api_key: str = ""
-    stability_base_url: str = "https://api.stability.ai/v2beta/stable-image/generate/core"
+    stability_base_url: str = "https://api.stability.ai/v2beta/stable-image/generate/ultra"
 
     # Firebase Admin SDK JSON path (relative to BACKEND_ROOT or absolute)
     firebase_credentials_path: str = ""

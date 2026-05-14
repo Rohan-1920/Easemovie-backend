@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,12 @@ from app.api.routes.projects import router as projects_router
 from app.core.config import settings
 from app.firestore_db import init_firestore
 from app.services.storage import MEDIA_ROOT, ensure_media_dirs
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 app = FastAPI(
