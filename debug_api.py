@@ -12,12 +12,11 @@ async def test_api() -> None:
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Accept": "image/png",
+        "Accept": "image/*",
     }
 
     payload = {
         "prompt": "A beautiful sunset over mountains. Mood: peaceful. Style: cinematic.",
-        "model": "sd3.5-large",
         "aspect_ratio": "1:1",
         "output_format": "png",
     }
@@ -27,17 +26,19 @@ async def test_api() -> None:
     print(f"Testing API call to: {url}")
     print("Payload keys:", list(payload.keys()))
 
+    multipart = {k: (None, v) for k, v in payload.items()}
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            # Prefer form encoding (same as production image_generation.py)
-            response = await client.post(url, headers=headers, data=payload)
+            response = await client.post(url, headers=headers, files=multipart)
             print(f"Status: {response.status_code}")
             print(f"Content-Type: {response.headers.get('content-type')}")
             print(f"Content-Length: {len(response.content)}")
 
             if response.status_code == 200:
                 ct = response.headers.get("content-type", "")
-                if ct.startswith("image/"):
+                is_png = len(response.content) >= 8 and response.content[:8] == b"\x89PNG\r\n\x1a\n"
+                if ct.startswith("image/") or is_png:
                     print("API returned image bytes")
                     with open("test_image.png", "wb") as f:
                         f.write(response.content)

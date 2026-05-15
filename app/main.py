@@ -43,6 +43,20 @@ app.include_router(projects_router)
 @app.on_event("startup")
 def startup() -> None:
     ensure_media_dirs()
+    fal_ok = bool((settings.fal_api_key or "").strip())
+    stability_ok = bool((settings.stability_api_key or "").strip())
+    logging.getLogger(__name__).info(
+        "Image providers: mode=%s fal_key=%s pollinations=%s stability_key=%s placeholder=%s",
+        settings.image_provider,
+        "yes" if fal_ok else "NO",
+        settings.pollinations_fallback_enabled,
+        "yes" if stability_ok else "no",
+        settings.image_allow_placeholder_fallback,
+    )
+    if not fal_ok and settings.image_provider in ("fal", "auto"):
+        logging.getLogger(__name__).warning(
+            'FAL_API_KEY missing. Add to .env: FAL_API_KEY="id:secret" (quotes required — key contains colon)'
+        )
     if not settings.skip_firestore_startup:
         init_firestore()
 
