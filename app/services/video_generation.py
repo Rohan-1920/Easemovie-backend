@@ -63,9 +63,15 @@ def generate_video_from_image_urls(
             for _ in range(repeat):
                 frames.append(arr)
 
-    with imageio.get_writer(output_path, fps=target_fps, codec="libx264", quality=8) as writer:
+    with imageio.get_writer(
+        output_path,
+        fps=target_fps,
+        codec="libx264",
+        quality=8,
+        ffmpeg_params=["-pix_fmt", "yuv420p"],
+    ) as writer:
         for frame in frames:
-            writer.append_data(frame)
+            writer.append_data(frame.astype("uint8", copy=False))
 
 
 def _resize_cover(img: Image.Image, w: int, h: int) -> Image.Image:
@@ -84,9 +90,15 @@ def generate_video_from_scenes(scenes: list[str], style: str, output_path: str) 
         img = _scene_text_image(scene=scene, style=style, width=1280, height=720)
         frames.append(np.array(img))
 
-    with imageio.get_writer(output_path, fps=1, codec="libx264", quality=7) as writer:
+    with imageio.get_writer(
+        output_path,
+        fps=1,
+        codec="libx264",
+        quality=7,
+        ffmpeg_params=["-pix_fmt", "yuv420p"],
+    ) as writer:
         for frame in frames:
-            writer.append_data(frame)
+            writer.append_data(frame.astype("uint8", copy=False))
 
 
 def _scene_text_image(scene: str, style: str, width: int, height: int) -> Image.Image:
