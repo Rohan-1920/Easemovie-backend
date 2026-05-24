@@ -1,37 +1,27 @@
-# Easemovie Backend — Architecture
+# Architecture
 
-## Storage model
+## AI models
 
-| Data | Where it lives |
-|------|----------------|
-| Generated images / videos / audio | Local **`media/`** (served under **`/media`**) |
-| Project records (`/projects`) | **Google Cloud Firestore** via Firebase Admin SDK |
-| Configuration | `.env` (never commit secrets) |
+```
+IMAGE_REPLICATE_API_TOKEN  →  black-forest-labs/flux-dev     →  POST /generate_image
+VIDEO_REPLICATE_API_TOKEN  →  sunfjun/stable-video-diffusion →  POST /generate_video*
+                                                                  (needs input_image URL)
+```
 
-**Admin SDK** bypasses client Firestore rules — protect the JSON key file and run the API only on trusted servers.
+- **FLUX Dev:** text → PNG (`prompt`, `aspect_ratio`, `output_format=png`, …)  
+- **Stable Video Diffusion:** `input_image` URL → MP4 (`video_length`, `frames_per_second`, …)  
+- Fallback: PIL placeholder (image), FFmpeg slideshow (video) if API fails or tokens missing  
 
-## Module map
+## Storage
 
-- **`app/main.py`** — FastAPI app, CORS, static mount, startup (**`init_firestore`** skipped when **`SKIP_FIRESTORE_STARTUP=true`**, e.g. pytest)
-- **`app/api/routes/generation.py`** — AI/video/voice endpoints
-- **`app/api/routes/projects.py`** — CRUD → **`firestore_db`**
-- **`app/firestore_db.py`** — Firebase init + Firestore CRUD for collection `settings.firestore_projects_collection`
-- **`app/services/*`** — segmentation, Stability images, slideshow video, Edge TTS, FFmpeg mux
-- **`app/core/config.py`** — env settings + **`BACKEND_ROOT`**
+| Data | Where |
+|------|--------|
+| Media files | `media/` → `/media` |
+| Projects | Firestore |
 
-## Automated tests
+## Code layout
 
-- **`tests/`** — `pytest` suite; **`tests/conftest.py`** sets **`SKIP_FIRESTORE_STARTUP=true`** so tests run without Firebase credentials.
-- **`requirements-dev.txt`** — installs **`pytest`** (`pip install -r requirements-dev.txt`).
-
-## Short-film sequence
-
-See README “How it works”. Compose uses FFmpeg to mux slideshow MP4 + narration MP3.
-
-## Firestore document shape (`projects`)
-
-Each document ID is a **string** (auto-generated). Fields align with `ProjectCreate`:
-
-- `user_id`, `title`, `style`, `video_url`, `thumbnail_url`, `scenes` (array), `created_at` (server timestamp)
-
-Android clients writing to the same **`projects`** collection will see documents created by this backend.
+- `app/providers/replicate_api.py` — HTTP + polling  
+- `app/providers/image_model.py` — FLUX  
+- `app/providers/video_model.py` — SVD  
+- `app/services/video_slideshow.py` — fallback slideshow  

@@ -1,9 +1,19 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SegmentRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "text": "A young girl named Mira finds a glowing lantern in an old forest. She follows fireflies to a hidden lake. She makes a wish and walks home at dawn with eternal light."
+                }
+            ]
+        }
+    )
+
     text: str = Field(..., min_length=1)
 
 
@@ -22,23 +32,120 @@ class ImageResponse(BaseModel):
     image_path: str
 
 
-class VideoRequest(BaseModel):
-    scenes: list[str]
-    style: str
-
-
 class VideoResponse(BaseModel):
     video_url: str
+    source: str = Field(
+        description="kling / svd / ai_video = Replicate animated video. slideshow_* = static fallback (not real animation)."
+    )
 
 
-class VideoFromImagesRequest(BaseModel):
-    """Build a slideshow video from scene image URLs (images must already exist)."""
+class VideoGenerateRequest(BaseModel):
+    """Text-only slideshow (dev/fallback). For paid AI video use POST /generate_video_from_images with image_url."""
 
-    image_urls: list[str] = Field(..., min_length=1)
-    seconds_per_scene: float = Field(default=3.0, gt=0, le=60)
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Scene or story description for the video.",
+        json_schema_extra={"examples": ["Mira walks through a glowing forest at sunset, fireflies floating around her"]},
+    )
+    style: str = Field(
+        ...,
+        min_length=1,
+        description="Visual style for the video.",
+        json_schema_extra={"examples": ["Pixar-style 3D animation, cinematic lighting, ultra detailed"]},
+    )
+    emotion: str = Field(
+        ...,
+        min_length=1,
+        description="Mood / emotion of the scene.",
+        json_schema_extra={"examples": ["curious, magical, warm"]},
+    )
+    seconds_per_scene: float = Field(
+        default=3.0,
+        gt=0,
+        le=60,
+        description="Duration per scene for text slideshow fallback.",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "text": "Mira walks through a glowing forest at sunset, fireflies floating around her, cinematic wide shot",
+                    "style": "Pixar-style 3D animation, cinematic lighting, ultra detailed",
+                    "emotion": "curious, magical, warm",
+                    "seconds_per_scene": 3.0,
+                }
+            ]
+        }
+    )
+
+
+class VideoFromImageRequest(BaseModel):
+    """Scene image → sunfjun Stable Video Diffusion (budget animated clip on Replicate)."""
+
+    image_url: str = Field(
+        ...,
+        min_length=1,
+        description="Full URL from POST /generate_image response (image_path field).",
+        json_schema_extra={
+            "examples": ["http://192.168.1.20:8000/media/images/28ea21ae93b240d49428c08c24067d59.png"]
+        },
+    )
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Scene / motion description for the video.",
+        json_schema_extra={
+            "examples": ["Mira walks slowly through the glowing forest, fireflies swirl around her, gentle camera push-in"]
+        },
+    )
+    style: str = Field(
+        ...,
+        min_length=1,
+        description="Visual style (used for slideshow fallback).",
+        json_schema_extra={"examples": ["Pixar-style 3D animation, cinematic lighting, ultra detailed"]},
+    )
+    emotion: str = Field(
+        ...,
+        min_length=1,
+        description="Mood / emotion of the scene.",
+        json_schema_extra={"examples": ["curious, magical, warm"]},
+    )
+    seconds_per_scene: float = Field(
+        default=5.0,
+        gt=0,
+        le=60,
+        description="Clip length for slideshow fallback when multiple images are used.",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "image_url": "http://192.168.1.20:8000/media/images/28ea21ae93b240d49428c08c24067d59.png",
+                    "text": "Mira walks slowly through the glowing forest, fireflies swirl around her, gentle camera push-in",
+                    "style": "Pixar-style 3D animation, cinematic lighting, ultra detailed",
+                    "emotion": "curious, magical, warm",
+                    "seconds_per_scene": 5.0,
+                }
+            ]
+        }
+    )
 
 
 class VoiceRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "text": "In a forest at dusk, Mira found a lantern that would never go out. She followed the fireflies to a lake of stars and carried the light home forever.",
+                    "voice": "en-US-JennyNeural",
+                }
+            ]
+        }
+    )
+
     text: str = Field(..., min_length=1)
     voice: str = Field(default="en-US-JennyNeural")
 
@@ -52,6 +159,21 @@ class ComposeFilmRequest(BaseModel):
     Short film: image slideshow plus optional narration (single block or per-scene lines).
     Do not send both narration modes at once.
     """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "image_urls": [
+                        "http://192.168.1.20:8000/media/images/28ea21ae93b240d49428c08c24067d59.png",
+                    ],
+                    "seconds_per_scene": 4.0,
+                    "narration_text": "Mira found a magical lantern in the forest. The fireflies led her to a lake of stars. She made one wish and walked home with eternal light.",
+                    "voice": "en-US-JennyNeural",
+                }
+            ]
+        }
+    )
 
     image_urls: list[str] = Field(..., min_length=1)
     seconds_per_scene: float = Field(default=3.0, gt=0, le=60)
