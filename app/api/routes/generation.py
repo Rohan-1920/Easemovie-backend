@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from app.schemas import (
     ComposeFilmRequest,
     ImageResponse,
+    ProjectCreate,
     SegmentRequest,
     SegmentResponse,
     VideoFromImageRequest,
@@ -22,6 +23,7 @@ from app.services.segmentation import split_story_to_scenes
 from app.services.storage import VIDEOS_DIR, new_audio_path, new_image_path, new_video_path
 from app.providers.video_model import build_motion_prompt, generate_video_file
 from app.services.voice_generation import synthesize_voice_mp3
+from app.firestore_db import create_project
 
 
 router = APIRouter(prefix="", tags=["generation"])
@@ -155,6 +157,34 @@ async def compose_film(payload: ComposeFilmRequest, request: Request) -> VideoRe
     base = settings.api_base_url(str(request.base_url))
     final_path = new_video_path()
 
+    def _project_scenes() -> list[str]:
+        if payload.scenes:
+            return payload.scenes
+        if payload.scene_narrations:
+            return payload.scene_narrations
+        if payload.narration_text and payload.narration_text.strip():
+            return [payload.narration_text.strip()]
+        return []
+
+    def _save_project_if_requested(video_name: str) -> None:
+        if not payload.save_project:
+            return
+        if not payload.user_id or not payload.title or not payload.style:
+            raise HTTPException(
+                status_code=400,
+                detail="user_id, title, and style are required to save project metadata.",
+            )
+        create_project(
+            ProjectCreate(
+                user_id=payload.user_id,
+                title=payload.title,
+                style=payload.style,
+                video_url=f"{base}/media/videos/{video_name}",
+                thumbnail_url=payload.thumbnail_url or "",
+                scenes=_project_scenes(),
+            )
+        )
+
     if not has_voice:
         try:
             source = await generate_video_file(
@@ -165,6 +195,7 @@ async def compose_film(payload: ComposeFilmRequest, request: Request) -> VideoRe
                 seconds_per_scene=payload.seconds_per_scene,
                 request_base=base,
             )
+            _save_project_if_requested(final_path.name)
             return VideoResponse(video_url=f"{base}/media/videos/{final_path.name}", source=source)
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -194,6 +225,7 @@ async def compose_film(payload: ComposeFilmRequest, request: Request) -> VideoRe
             narration_mp3 = new_audio_path()
             await synthesize_voice_mp3(payload.narration_text or "", payload.voice, narration_mp3)
             mux_video_audio(str(silent_path), str(narration_mp3), str(final_path))
+        _save_project_if_requested(final_path.name)
     except HTTPException:
         raise
     except Exception as exc:

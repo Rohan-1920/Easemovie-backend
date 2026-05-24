@@ -6,13 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes.auth import router as auth_router
 from app.api.routes.generation import router as generation_router
 from app.api.routes.projects import router as projects_router
 from app.core.config import settings
 from app.core.startup_checks import is_valid_replicate_token, run_startup_checks
 from app.firestore_db import init_firestore
 from app.services.storage import MEDIA_ROOT, ensure_media_dirs
-
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -28,9 +28,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# Ensure media directories exist before mounting StaticFiles.
 ensure_media_dirs()
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
+app.include_router(auth_router)
 app.include_router(generation_router)
 app.include_router(projects_router)
 

@@ -168,8 +168,12 @@ class ComposeFilmRequest(BaseModel):
                         "http://192.168.1.20:8000/media/images/28ea21ae93b240d49428c08c24067d59.png",
                     ],
                     "seconds_per_scene": 4.0,
-                    "narration_text": "Mira found a magical lantern in the forest. The fireflies led her to a lake of stars. She made one wish and walked home with eternal light.",
+                    "narration_text": "Mira found a magical lantern in the forest.",
                     "voice": "en-US-JennyNeural",
+                    "user_id": "user123",
+                    "title": "Forest Tale",
+                    "style": "Pixar-style 3D",
+                    "save_project": True,
                 }
             ]
         }
@@ -180,6 +184,14 @@ class ComposeFilmRequest(BaseModel):
     narration_text: str | None = None
     scene_narrations: list[str] | None = None
     voice: str = Field(default="en-US-JennyNeural")
+
+    # Optional project metadata to save generated content into Firestore.
+    user_id: str | None = None
+    title: str | None = None
+    style: str | None = None
+    thumbnail_url: str | None = None
+    scenes: list[str] | None = None
+    save_project: bool = Field(default=False)
 
     @model_validator(mode="after")
     def narration_exclusive(self) -> ComposeFilmRequest:
@@ -202,3 +214,26 @@ class ProjectCreate(BaseModel):
 class ProjectOut(ProjectCreate):
     id: str
     created_at: str
+
+
+class UserCreate(BaseModel):
+    email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=6)
+    name: str | None = None
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    name: str | None = None
+    created_at: str
+
+
+class SignInRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

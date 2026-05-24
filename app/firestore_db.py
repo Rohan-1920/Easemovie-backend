@@ -19,25 +19,28 @@ def init_firestore() -> None:
         return
     raw = (settings.firebase_credentials_path or "").strip()
     if not raw:
-        raise RuntimeError(
-            "FIREBASE_CREDENTIALS_PATH missing in .env. "
-            "Firebase Console → Project settings → Service accounts → Generate new private key."
-        )
+        print("WARNING: FIREBASE_CREDENTIALS_PATH not set. Firebase disabled.")
+        return
     path = Path(raw)
     if not path.is_absolute():
         path = BACKEND_ROOT / path
     path = path.resolve()
     if not path.is_file():
-        raise RuntimeError(f"Firebase credentials file not found: {path}")
-    cred = credentials.Certificate(str(path))
-    initialize_app(cred)
+        print(f"WARNING: Firebase credentials file not found: {path}. Firebase disabled.")
+        return
+    try:
+        cred = credentials.Certificate(str(path))
+        initialize_app(cred)
+        print(f"Firebase initialized successfully from {path}")
+    except Exception as e:
+        print(f"WARNING: Failed to initialize Firebase: {e}. Firebase disabled.")
 
 
 def _collection():
     if not firebase_admin._apps:
         raise RuntimeError(
-            "Firestore is not initialized. Configure FIREBASE_CREDENTIALS_PATH "
-            "and ensure SKIP_FIRESTORE_STARTUP is not enabled."
+            "Firebase/Firestore is not initialized. "
+            "Configure FIREBASE_CREDENTIALS_PATH and ensure the credentials file exists."
         )
     return firestore.client().collection(settings.firestore_projects_collection)
 
