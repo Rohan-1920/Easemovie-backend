@@ -43,6 +43,17 @@ class Settings(BaseSettings):
 
     allow_ai_fallback: bool = True
 
+    # Return job_id immediately for long video routes (fixes Render/proxy timeouts).
+    generation_async_default: bool = True
+
+    # --- ElevenLabs TTS (story narration) ---
+    elevenlabs_api_key: str = ""
+    elevenlabs_model: str = "eleven_flash_v2_5"
+    elevenlabs_stability: float = 0.55
+    elevenlabs_similarity_boost: float = 0.75
+    elevenlabs_style: float = 0.0
+    elevenlabs_use_speaker_boost: bool = True
+
     firebase_credentials_path: str = ""
     firestore_projects_collection: str = "projects"
     firestore_users_collection: str = "users"

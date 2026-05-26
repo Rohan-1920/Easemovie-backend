@@ -1,6 +1,13 @@
 import re
 
 from app.schemas import SceneDto, SegmentResponse
+from app.services.story_analysis import guess_mood, pick_voice_for_text
+
+
+def _elevenlabs_ready() -> bool:
+    from app.services.voice_generation import elevenlabs_configured
+
+    return elevenlabs_configured()
 
 
 def split_story_to_scenes(text: str) -> SegmentResponse:
@@ -9,22 +16,27 @@ def split_story_to_scenes(text: str) -> SegmentResponse:
     if not segments:
         segments = [raw]
 
-    scenes = [
-        SceneDto(index=i, text=segment, mood=_guess_mood(segment), camera=_camera_by_index(i))
-        for i, segment in enumerate(segments, start=1)
-    ]
+    use_eleven = _elevenlabs_ready()
+    scenes = []
+    for i, segment in enumerate(segments, start=1):
+        mood = guess_mood(segment)
+        voice_choice = pick_voice_for_text(
+            segment,
+            voice="auto",
+            story_context=raw,
+            use_elevenlabs=use_eleven,
+        )
+        scenes.append(
+            SceneDto(
+                index=i,
+                text=segment,
+                mood=mood,
+                camera=_camera_by_index(i),
+                voice=voice_choice.voice_id,
+                voice_name=voice_choice.voice_name,
+            )
+        )
     return SegmentResponse(scenes=scenes)
-
-
-def _guess_mood(text: str) -> str:
-    t = text.lower()
-    if any(word in t for word in ("fight", "war", "danger", "storm", "escape")):
-        return "intense"
-    if any(word in t for word in ("love", "friend", "happy", "smile", "hope")):
-        return "warm"
-    if any(word in t for word in ("space", "future", "robot", "alien", "planet")):
-        return "mysterious"
-    return "neutral"
 
 
 def _camera_by_index(index: int) -> str:

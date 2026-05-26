@@ -10,7 +10,7 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.generation import router as generation_router
 from app.api.routes.projects import router as projects_router
 from app.core.config import settings
-from app.core.startup_checks import is_valid_replicate_token, run_startup_checks
+from app.core.startup_checks import is_valid_elevenlabs_key, is_valid_replicate_token, run_startup_checks
 from app.firestore_db import init_firestore
 from app.services.storage import MEDIA_ROOT, ensure_media_dirs
 
@@ -56,6 +56,10 @@ def health() -> dict:
             "video_token_set": bool(s.video_token()),
             "image_token_valid": is_valid_replicate_token(s.image_token()),
             "video_token_valid": is_valid_replicate_token(s.video_token()),
+            "elevenlabs_key_set": bool((s.elevenlabs_api_key or "").strip()),
+            "elevenlabs_key_valid": is_valid_elevenlabs_key(s.elevenlabs_api_key),
+            "elevenlabs_model": s.elevenlabs_model,
+            "voice_mode": "elevenlabs" if is_valid_elevenlabs_key(s.elevenlabs_api_key) else "edge_fallback",
             "public_base_url": (s.public_base_url or "").strip() or None,
             "allow_ai_fallback": s.allow_ai_fallback,
         },

@@ -22,6 +22,11 @@ class SceneDto(BaseModel):
     text: str
     mood: str
     camera: str
+    voice: str = Field(
+        default="auto",
+        description="Recommended voice id (ElevenLabs) or Edge TTS name for this scene.",
+    )
+    voice_name: str = Field(default="", description="Human-readable voice label.")
 
 
 class SegmentResponse(BaseModel):
@@ -33,10 +38,27 @@ class ImageResponse(BaseModel):
 
 
 class VideoResponse(BaseModel):
-    video_url: str
-    source: str = Field(
-        description="kling / svd / ai_video = Replicate animated video. slideshow_* = static fallback (not real animation)."
+    video_url: str = ""
+    source: str = "pending"
+    voice: str | None = Field(default=None, description="Primary narration voice id when voice was used.")
+    voice_name: str | None = Field(default=None, description="Human-readable narration voice name.")
+    provider: str | None = Field(default=None, description="elevenlabs or edge when narration was synthesized.")
+    job_id: str | None = Field(
+        default=None,
+        description="Present when generation runs in background; poll GET /jobs/{job_id}.",
     )
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    kind: str
+    status: str
+    progress: float
+    message: str
+    result: dict | None = None
+    error: str | None = None
+    created_at: float
+    updated_at: float
 
 
 class VideoGenerateRequest(BaseModel):
@@ -82,35 +104,39 @@ class VideoGenerateRequest(BaseModel):
 
 
 class VideoFromImageRequest(BaseModel):
-    """Scene image → sunfjun Stable Video Diffusion (budget animated clip on Replicate)."""
+    """Scene image(s) → SVD animated clip(s). Use image_urls for multi-scene."""
 
-    image_url: str = Field(
-        ...,
+    image_url: str | None = Field(
+        default=None,
         min_length=1,
-        description="Full URL from POST /generate_image response (image_path field).",
-        json_schema_extra={
-            "examples": ["http://192.168.1.20:8000/media/images/28ea21ae93b240d49428c08c24067d59.png"]
-        },
+        description="Single scene image URL from POST /generate_image.",
+    )
+    image_urls: list[str] | None = Field(
+        default=None,
+        description="Multiple scene image URLs (multi-scene SVD when 2+ URLs).",
     )
     text: str = Field(
         ...,
         min_length=1,
         description="Scene / motion description for the video.",
-        json_schema_extra={
-            "examples": ["Mira walks slowly through the glowing forest, fireflies swirl around her, gentle camera push-in"]
-        },
     )
     style: str = Field(
         ...,
         min_length=1,
         description="Visual style (used for slideshow fallback).",
-        json_schema_extra={"examples": ["Pixar-style 3D animation, cinematic lighting, ultra detailed"]},
     )
     emotion: str = Field(
         ...,
         min_length=1,
         description="Mood / emotion of the scene.",
-        json_schema_extra={"examples": ["curious, magical, warm"]},
+    )
+    scene_texts: list[str] | None = Field(
+        default=None,
+        description="Optional per-scene motion prompts (same order as image_urls).",
+    )
+    scene_emotions: list[str] | None = Field(
+        default=None,
+        description="Optional per-scene moods for motion/voice hints.",
     )
     seconds_per_scene: float = Field(
         default=5.0,
@@ -118,6 +144,14 @@ class VideoFromImageRequest(BaseModel):
         le=60,
         description="Clip length for slideshow fallback when multiple images are used.",
     )
+
+    @model_validator(mode="after")
+    def require_image(self) -> VideoFromImageRequest:
+        single = (self.image_url or "").strip()
+        multi = [u.strip() for u in (self.image_urls or []) if u and u.strip()]
+        if not single and not multi:
+            raise ValueError("Provide image_url or image_urls.")
+        return self
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -140,24 +174,36 @@ class VoiceRequest(BaseModel):
             "examples": [
                 {
                     "text": "In a forest at dusk, Mira found a lantern that would never go out. She followed the fireflies to a lake of stars and carried the light home forever.",
-                    "voice": "en-US-JennyNeural",
+                    "voice": "auto",
                 }
             ]
         }
     )
 
     text: str = Field(..., min_length=1)
-    voice: str = Field(default="en-US-JennyNeural")
+    voice: str = Field(
+        default="auto",
+        description='Use "auto" for mood/story-based voice, or a name like Adam/Rachel, ElevenLabs voice id, or Edge name.',
+    )
+    story_context: str | None = Field(
+        default=None,
+        description="Optional full story text to improve genre-based voice selection.",
+    )
 
 
 class VoiceResponse(BaseModel):
     audio_url: str
+    voice: str = Field(description="Voice id used for synthesis.")
+    voice_name: str = Field(default="", description="Human-readable voice name.")
+    mood: str = Field(default="", description="Detected scene mood.")
+    story_genre: str = Field(default="", description="Detected story genre.")
+    provider: str = Field(default="", description="elevenlabs or edge")
 
 
 class ComposeFilmRequest(BaseModel):
     """
-    Short film: image slideshow plus optional narration (single block or per-scene lines).
-    Do not send both narration modes at once.
+    Multi-scene film: each image_url is animated with SVD, clips are joined, optional narration mixed in.
+    Use scene_narrations + scene_moods from POST /segment for voice and motion per scene.
     """
 
     model_config = ConfigDict(
@@ -169,7 +215,7 @@ class ComposeFilmRequest(BaseModel):
                     ],
                     "seconds_per_scene": 4.0,
                     "narration_text": "Mira found a magical lantern in the forest.",
-                    "voice": "en-US-JennyNeural",
+                    "voice": "auto",
                     "user_id": "user123",
                     "title": "Forest Tale",
                     "style": "Pixar-style 3D",
@@ -183,7 +229,18 @@ class ComposeFilmRequest(BaseModel):
     seconds_per_scene: float = Field(default=3.0, gt=0, le=60)
     narration_text: str | None = None
     scene_narrations: list[str] | None = None
-    voice: str = Field(default="en-US-JennyNeural")
+    scene_moods: list[str] | None = Field(
+        default=None,
+        description="Optional per-scene moods from /segment; improves auto voice selection.",
+    )
+    voice: str = Field(
+        default="auto",
+        description='Use "auto" for mood/story-based voice, or explicit voice name/id.',
+    )
+    story_context: str | None = Field(
+        default=None,
+        description="Optional full story text for consistent genre-based narration.",
+    )
 
     # Optional project metadata to save generated content into Firestore.
     user_id: str | None = None
@@ -199,6 +256,12 @@ class ComposeFilmRequest(BaseModel):
         has_scenes = bool(self.scene_narrations)
         if has_text and has_scenes:
             raise ValueError("Use either narration_text or scene_narrations, not both.")
+        if self.scene_moods and self.scene_narrations:
+            if len(self.scene_moods) != len(self.scene_narrations):
+                raise ValueError("scene_moods must have the same length as scene_narrations.")
+        if self.scene_moods and not self.scene_narrations:
+            if len(self.scene_moods) != len(self.image_urls):
+                raise ValueError("scene_moods must have the same length as image_urls.")
         return self
 
 

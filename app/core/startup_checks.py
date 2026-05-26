@@ -27,6 +27,21 @@ def _looks_like_placeholder(token: str) -> bool:
     return not t.startswith("r8_")
 
 
+def is_valid_elevenlabs_key(key: str) -> bool:
+    """True when key is non-empty and not a template placeholder."""
+    k = (key or "").strip()
+    return bool(k) and not _looks_like_elevenlabs_placeholder(k)
+
+
+def _looks_like_elevenlabs_placeholder(key: str) -> bool:
+    k = key.strip().lower()
+    if not k:
+        return False
+    if any(m in k for m in _PLACEHOLDER_MARKERS):
+        return True
+    return not (k.startswith("sk_") or k.startswith("xi_"))
+
+
 def run_startup_checks() -> list[str]:
     warnings: list[str] = []
 
@@ -57,6 +72,19 @@ def run_startup_checks() -> list[str]:
         )
     else:
         logger.info("PUBLIC_BASE_URL: %s", settings.public_base_url.strip())
+
+    eleven_key = (settings.elevenlabs_api_key or "").strip()
+    if not eleven_key:
+        warnings.append(
+            "ELEVENLABS_API_KEY is not set — narration will use Edge TTS fallback. "
+            "Add your key in app/.env for ElevenLabs auto voice."
+        )
+    elif _looks_like_elevenlabs_placeholder(eleven_key):
+        warnings.append(
+            "ELEVENLABS_API_KEY looks like a placeholder — paste your real sk_... key from ElevenLabs."
+        )
+    else:
+        logger.info("ElevenLabs TTS ready (model=%s, auto mood voice)", settings.elevenlabs_model)
 
     for msg in warnings:
         logger.warning(msg)

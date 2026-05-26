@@ -48,6 +48,8 @@ def _collection():
 def _created_sort_value(data: dict | None) -> float:
     if not data:
         return 0.0
+    if isinstance(data.get("createdAt"), (int, float)):
+        return float(data["createdAt"]) / 1000.0
     c = data.get("created_at")
     if c is None:
         return 0.0
@@ -72,6 +74,8 @@ def _doc_to_project(doc_id: str, data: dict | None) -> ProjectOut:
         created_str = created.isoformat()
     elif isinstance(created, str):
         created_str = created
+    elif isinstance(data.get("createdAt"), (int, float)):
+        created_str = datetime.fromtimestamp(float(data["createdAt"]) / 1000.0, tz=timezone.utc).isoformat()
     else:
         created_str = datetime.now(timezone.utc).isoformat()
 
@@ -80,11 +84,11 @@ def _doc_to_project(doc_id: str, data: dict | None) -> ProjectOut:
 
     return ProjectOut(
         id=doc_id,
-        user_id=str(data.get("user_id") or ""),
+        user_id=str(data.get("user_id") or data.get("userId") or ""),
         title=str(data.get("title") or ""),
         style=str(data.get("style") or ""),
-        video_url=str(data.get("video_url") or ""),
-        thumbnail_url=str(data.get("thumbnail_url") or ""),
+        video_url=str(data.get("video_url") or data.get("videoUrl") or ""),
+        thumbnail_url=str(data.get("thumbnail_url") or data.get("thumbnailUrl") or ""),
         scenes=scenes,
         created_at=created_str,
     )
@@ -93,14 +97,24 @@ def _doc_to_project(doc_id: str, data: dict | None) -> ProjectOut:
 def create_project(payload: ProjectCreate) -> ProjectOut:
     col = _collection()
     doc_ref = col.document()
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    scenes = payload.scenes or []
+    video_url = payload.video_url
+    thumb = payload.thumbnail_url or ""
+
+    # Android app reads camelCase fields (userId, videoUrl, createdAt).
     doc_ref.set(
         {
+            "userId": payload.user_id,
             "user_id": payload.user_id,
             "title": payload.title,
             "style": payload.style,
-            "video_url": payload.video_url,
-            "thumbnail_url": payload.thumbnail_url or "",
-            "scenes": payload.scenes,
+            "videoUrl": video_url,
+            "video_url": video_url,
+            "thumbnailUrl": thumb,
+            "thumbnail_url": thumb,
+            "scenes": scenes,
+            "createdAt": now_ms,
             "created_at": firestore.SERVER_TIMESTAMP,
         }
     )
@@ -112,7 +126,9 @@ def list_projects(user_id: str | None = None) -> list[ProjectOut]:
     col = _collection()
     try:
         if user_id:
-            snaps = list(col.where("user_id", "==", user_id).stream())
+            snaps = list(col.where("userId", "==", user_id).stream())
+            if not snaps:
+                snaps = list(col.where("user_id", "==", user_id).stream())
         else:
             snaps = list(col.stream())
     except FirebaseError as exc:

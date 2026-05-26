@@ -1,2 +1,2 @@
-# Development & automated checks (final-year demos / CI-friendly)
+# Development & automated checks
 pytest>=8.0.0

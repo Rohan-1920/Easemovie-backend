@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import logging
+import shutil
+import tempfile
+import uuid
 from pathlib import Path
 
 from app.core.config import settings
 from app.core.media_urls import is_local_host, local_media_path_from_url, to_public_media_url
 from app.providers import replicate_api
+from app.services.ffmpeg_mux import concat_video_files
+from app.services.storage import VIDEOS_DIR
 from app.services.video_slideshow import generate_slideshow_from_image_urls
 
 logger = logging.getLogger("easemovie.video")
@@ -27,13 +32,13 @@ def build_motion_prompt(*, text: str, style: str, emotion: str) -> str:
     )
 
 
-def video_source_label(model_slug: str) -> str:
+def video_source_label(model_slug: str, *, multi_scene: bool = False) -> str:
     slug = (model_slug or "").lower()
     if "kling" in slug:
         return "kling"
     if "stable-video" in slug or "svd" in slug:
-        return "svd"
-    return "ai_video"
+        return "svd_multi" if multi_scene else "svd"
+    return "ai_video_multi" if multi_scene else "ai_video"
 
 
 def _build_model_input(model_slug: str, *, motion_prompt: str, input_image_url: str) -> dict:
@@ -87,6 +92,30 @@ async def resolve_input_image_for_video(
     )
 
 
+def _scene_motion_text(
+    index: int,
+    *,
+    scene_texts: list[str] | None,
+    fallback_prompt: str,
+) -> str:
+    if scene_texts and index < len(scene_texts):
+        line = (scene_texts[index] or "").strip()
+        if line:
+            return line
+    cleaned = (fallback_prompt or "").strip()
+    if cleaned and cleaned.lower() != "composed short film from scenes":
+        return cleaned
+    return f"Cinematic story scene {index + 1} with natural motion and depth"
+
+
+def _scene_emotion(index: int, scene_emotions: list[str] | None) -> str:
+    if scene_emotions and index < len(scene_emotions):
+        mood = (scene_emotions[index] or "").strip()
+        if mood:
+            return mood
+    return "neutral"
+
+
 async def generate_video_file(
     *,
     output_path: Path,
@@ -94,23 +123,46 @@ async def generate_video_file(
     style: str,
     image_urls: list[str] | None = None,
     scene_texts: list[str] | None = None,
+    scene_emotions: list[str] | None = None,
     seconds_per_scene: float = 3.0,
     request_base: str = "",
 ) -> str:
-    """Returns source label: kling | svd | ai_video | slideshow_images | slideshow_text."""
+    """Returns source label: kling | svd | svd_multi | ai_video | slideshow_*."""
     token = settings.video_token()
     model = (settings.video_model or "sunfjun/stable-video-diffusion").strip()
+    urls = [u.strip() for u in (image_urls or []) if u and u.strip()]
 
-    if token and image_urls:
-        input_image = await resolve_input_image_for_video(
-            image_urls[0], token, request_base=request_base
-        )
+    if token and len(urls) > 1:
+        try:
+            source = await _generate_multi_scene_ai_video(
+                api_token=token,
+                model_slug=model,
+                output_path=output_path,
+                image_urls=urls,
+                style=style,
+                fallback_prompt=prompt,
+                scene_texts=scene_texts,
+                scene_emotions=scene_emotions,
+                request_base=request_base,
+            )
+            logger.info("Multi-scene AI video saved (%s): %s", source, output_path.name)
+            return source
+        except Exception as exc:
+            if not settings.allow_ai_fallback:
+                raise RuntimeError(f"Multi-scene AI video failed ({model}): {exc}") from exc
+            logger.warning("Multi-scene AI video failed (%s) — slideshow fallback.", exc)
+
+    if token and len(urls) == 1:
+        text = _scene_motion_text(0, scene_texts=scene_texts, fallback_prompt=prompt)
+        emotion = _scene_emotion(0, scene_emotions)
+        motion_prompt = build_motion_prompt(text=text, style=style, emotion=emotion)
+        input_image = await resolve_input_image_for_video(urls[0], token, request_base=request_base)
         try:
             await _generate_ai_video(
                 api_token=token,
                 model_slug=model,
                 output_path=output_path,
-                motion_prompt=prompt,
+                motion_prompt=motion_prompt,
                 input_image_url=input_image,
             )
             source = video_source_label(model)
@@ -118,14 +170,12 @@ async def generate_video_file(
             return source
         except Exception as exc:
             if not settings.allow_ai_fallback:
-                raise RuntimeError(
-                    f"AI video generation failed ({model}): {exc}"
-                ) from exc
+                raise RuntimeError(f"AI video generation failed ({model}): {exc}") from exc
             logger.warning("AI video failed (%s) — slideshow fallback.", exc)
 
-    if image_urls:
+    if urls:
         generate_slideshow_from_image_urls(
-            image_urls,
+            urls,
             str(output_path),
             seconds_per_image=seconds_per_scene,
         )
@@ -142,6 +192,56 @@ async def generate_video_file(
             "VIDEO_REPLICATE_API_TOKEN is not set and no image_urls were provided for slideshow."
         )
     raise RuntimeError("Video generation failed: provide image_url from /generate_image first.")
+
+
+async def _generate_multi_scene_ai_video(
+    *,
+    api_token: str,
+    model_slug: str,
+    output_path: Path,
+    image_urls: list[str],
+    style: str,
+    fallback_prompt: str,
+    scene_texts: list[str] | None,
+    scene_emotions: list[str] | None,
+    request_base: str,
+) -> str:
+    clip_paths: list[str] = []
+    tmp_dir = VIDEOS_DIR / f"_clips_{uuid.uuid4().hex}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        for index, image_url in enumerate(image_urls):
+            text = _scene_motion_text(index, scene_texts=scene_texts, fallback_prompt=fallback_prompt)
+            emotion = _scene_emotion(index, scene_emotions)
+            motion_prompt = build_motion_prompt(text=text, style=style, emotion=emotion)
+            input_image = await resolve_input_image_for_video(
+                image_url, api_token, request_base=request_base
+            )
+            clip_path = tmp_dir / f"scene_{index + 1}.mp4"
+            logger.info("SVD scene %s/%s: %s", index + 1, len(image_urls), image_url[:80])
+            await _generate_ai_video(
+                api_token=api_token,
+                model_slug=model_slug,
+                output_path=clip_path,
+                motion_prompt=motion_prompt,
+                input_image_url=input_image,
+            )
+            clip_paths.append(str(clip_path))
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, dir=VIDEOS_DIR) as merged:
+            merged_path = merged.name
+        try:
+            concat_video_files(clip_paths, merged_path)
+            output_path.write_bytes(Path(merged_path).read_bytes())
+        finally:
+            Path(merged_path).unlink(missing_ok=True)
+    finally:
+        for clip in clip_paths:
+            Path(clip).unlink(missing_ok=True)
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return video_source_label(model_slug, multi_scene=True)
 
 
 async def _generate_ai_video(
