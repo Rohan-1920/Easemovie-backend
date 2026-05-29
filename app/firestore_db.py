@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,18 +14,39 @@ from app.core.config import BACKEND_ROOT, settings
 from app.schemas import ProjectCreate, ProjectOut
 
 
-def init_firestore() -> None:
-    """Initialize Firebase Admin once using the service-account JSON path."""
-    if firebase_admin._apps:
-        return
+def _resolve_credentials_path() -> Path | None:
     raw = (settings.firebase_credentials_path or "").strip()
     if not raw:
-        print("WARNING: FIREBASE_CREDENTIALS_PATH not set. Firebase disabled.")
-        return
+        return None
     path = Path(raw)
     if not path.is_absolute():
         path = BACKEND_ROOT / path
-    path = path.resolve()
+    return path.resolve()
+
+
+def init_firestore() -> None:
+    """Initialize Firebase Admin from JSON env (Render) or service-account file (local)."""
+    if firebase_admin._apps:
+        return
+
+    json_raw = (settings.firebase_credentials_json or "").strip()
+    if json_raw:
+        try:
+            cred = credentials.Certificate(json.loads(json_raw))
+            initialize_app(cred)
+            print("Firebase initialized successfully from FIREBASE_CREDENTIALS_JSON")
+            return
+        except Exception as e:
+            print(f"WARNING: Failed to parse FIREBASE_CREDENTIALS_JSON: {e}. Firebase disabled.")
+            return
+
+    path = _resolve_credentials_path()
+    if path is None:
+        print(
+            "WARNING: Set FIREBASE_CREDENTIALS_JSON (Render) or FIREBASE_CREDENTIALS_PATH (local). "
+            "Firebase disabled."
+        )
+        return
     if not path.is_file():
         print(f"WARNING: Firebase credentials file not found: {path}. Firebase disabled.")
         return

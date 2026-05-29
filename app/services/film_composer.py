@@ -9,12 +9,13 @@ from typing import Callable
 
 from fastapi import HTTPException
 
+from app.core.config import settings
 from app.firestore_db import create_project
 from app.providers.video_model import generate_video_file
 from app.schemas import ComposeFilmRequest, ProjectCreate, VideoResponse
 from app.services.ffmpeg_mux import concat_mp3_files, mux_video_audio
 from app.services.storage import VIDEOS_DIR, new_audio_path, new_video_path
-from app.services.voice_generation import synthesize_voice_mp3
+from app.services.voice_generation import ensure_elevenlabs_usable, synthesize_voice_mp3
 
 
 ProgressCallback = Callable[[float, str], None]
@@ -72,6 +73,12 @@ async def run_compose_film(
 
     _progress(0.05, "Starting film composition")
 
+    use_elevenlabs = False
+    if has_voice:
+        use_elevenlabs = await ensure_elevenlabs_usable()
+        if not use_elevenlabs and (settings.elevenlabs_api_key or "").strip():
+            _progress(0.06, "ElevenLabs unavailable — Edge TTS narration")
+
     if not has_voice:
         _progress(0.15, "Generating animated scenes")
         source = await generate_video_file(
@@ -125,6 +132,7 @@ async def run_compose_film(
                         part_file,
                         story_context=story_context,
                         mood_override=scene_mood,
+                        use_elevenlabs=use_elevenlabs,
                     )
                     if narration_choice is None:
                         narration_choice = choice
@@ -141,6 +149,7 @@ async def run_compose_film(
                 payload.voice,
                 narration_mp3,
                 story_context=story_context,
+                use_elevenlabs=use_elevenlabs,
             )
             _progress(0.9, "Mixing audio and video")
             mux_video_audio(str(silent_path), str(narration_mp3), str(final_path))

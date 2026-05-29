@@ -54,7 +54,9 @@ class Settings(BaseSettings):
     elevenlabs_style: float = 0.0
     elevenlabs_use_speaker_boost: bool = True
 
+    # Local: path to service-account JSON. Render: use Secret File path or FIREBASE_CREDENTIALS_JSON.
     firebase_credentials_path: str = ""
+    firebase_credentials_json: str = ""
     firestore_projects_collection: str = "projects"
     firestore_users_collection: str = "users"
     skip_firestore_startup: bool = Field(default=False)

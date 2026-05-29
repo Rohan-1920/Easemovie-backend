@@ -11,10 +11,36 @@ from app.core.config import settings
 logger = logging.getLogger("easemovie.elevenlabs")
 
 ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+ELEVENLABS_USER_URL = "https://api.elevenlabs.io/v1/user"
+
+
+def _api_key() -> str:
+    return (settings.elevenlabs_api_key or "").strip()
+
+
+async def verify_api_key() -> tuple[bool, str]:
+    """Call ElevenLabs /v1/user — returns (ok, error_message)."""
+    api_key = _api_key()
+    if not api_key:
+        return False, "ELEVENLABS_API_KEY is not set."
+
+    timeout = httpx.Timeout(connect=15.0, read=30.0, write=15.0, pool=15.0)
+    headers = {"xi-api-key": api_key}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.get(ELEVENLABS_USER_URL, headers=headers)
+
+    if response.status_code == 401:
+        return False, (
+            "ElevenLabs API key is invalid (401). Use a new key from "
+            "https://elevenlabs.io/app/settings/api-keys with Text to Speech + Voices Read + Models Read."
+        )
+    if response.status_code >= 400:
+        return False, f"ElevenLabs key check failed ({response.status_code}): {response.text[:200]}"
+    return True, ""
 
 
 async def synthesize_speech_mp3(text: str, voice_id: str) -> bytes:
-    api_key = (settings.elevenlabs_api_key or "").strip()
+    api_key = _api_key()
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY is not set.")
 
@@ -43,7 +69,9 @@ async def synthesize_speech_mp3(text: str, voice_id: str) -> bytes:
         )
 
     if response.status_code == 401:
-        raise RuntimeError("ElevenLabs API key is invalid.")
+        raise RuntimeError(
+            "ElevenLabs API key is invalid (401). Create a new key with Text to Speech permission."
+        )
     if response.status_code == 429:
         raise RuntimeError("ElevenLabs quota exceeded. Wait for reset or upgrade plan.")
     if response.status_code >= 400:
