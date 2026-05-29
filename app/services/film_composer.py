@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import tempfile
 import uuid
 from pathlib import Path
@@ -17,6 +18,7 @@ from app.services.ffmpeg_mux import concat_mp3_files, mux_video_audio
 from app.services.storage import VIDEOS_DIR, new_audio_path, new_video_path
 from app.services.voice_generation import ensure_elevenlabs_usable, synthesize_voice_mp3
 
+logger = logging.getLogger("easemovie.film")
 
 ProgressCallback = Callable[[float, str], None]
 
@@ -56,16 +58,21 @@ async def run_compose_film(
                 status_code=400,
                 detail="user_id, title, and style are required to save project metadata.",
             )
-        create_project(
-            ProjectCreate(
-                user_id=payload.user_id,
-                title=payload.title,
-                style=payload.style,
-                video_url=f"{base}/media/videos/{video_name}",
-                thumbnail_url=payload.thumbnail_url or "",
-                scenes=_project_scenes(),
+        try:
+            create_project(
+                ProjectCreate(
+                    user_id=payload.user_id,
+                    title=payload.title,
+                    style=payload.style,
+                    video_url=f"{base}/media/videos/{video_name}",
+                    thumbnail_url=payload.thumbnail_url or "",
+                    scenes=_project_scenes(),
+                )
             )
-        )
+        except Exception as exc:
+            logger.warning(
+                "Video saved but Firestore project save failed (video still returned): %s", exc
+            )
 
     def _progress(value: float, message: str) -> None:
         if on_progress:

@@ -73,21 +73,18 @@ async def synthesize_voice_mp3(
             return choice
         except RuntimeError as exc:
             global _elevenlabs_rejected
-            msg = str(exc).lower()
-            if "invalid" in msg or "401" in msg or "quota" in msg or "not set" in msg:
-                logger.warning("ElevenLabs failed (%s) — falling back to Edge TTS.", exc)
-                _elevenlabs_rejected = True
-                edge_choice = pick_voice_for_text(
-                    cleaned,
-                    voice=voice,
-                    story_context=story_context,
-                    use_elevenlabs=False,
-                    mood_override=mood_override,
-                )
-                communicate = edge_tts.Communicate(cleaned, edge_choice.voice_id)
-                await communicate.save(str(output_path))
-                return edge_choice
-            raise
+            logger.warning("ElevenLabs failed (%s) — falling back to Edge TTS.", exc)
+            _elevenlabs_rejected = True
+            edge_choice = pick_voice_for_text(
+                cleaned,
+                voice=voice,
+                story_context=story_context,
+                use_elevenlabs=False,
+                mood_override=mood_override,
+            )
+            communicate = edge_tts.Communicate(cleaned, edge_choice.voice_id)
+            await communicate.save(str(output_path))
+            return edge_choice
 
     communicate = edge_tts.Communicate(cleaned, choice.voice_id)
     await communicate.save(str(output_path))
