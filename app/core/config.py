@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     svd_motion_bucket_id: int = 180
     svd_cond_aug: float = 0.02
     svd_decoding_t: int = 8
+    svd_parallel_scenes: bool = True
+    compose_fast_video: bool = False
 
     replicate_poll_interval_seconds: float = 2.0
     replicate_poll_timeout_seconds: float = 900.0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 import tempfile
@@ -132,6 +133,16 @@ async def generate_video_file(
     model = (settings.video_model or "sunfjun/stable-video-diffusion").strip()
     urls = [u.strip() for u in (image_urls or []) if u and u.strip()]
 
+    if settings.compose_fast_video and urls:
+        await asyncio.to_thread(
+            generate_slideshow_from_image_urls,
+            urls,
+            str(output_path),
+            seconds_per_image=seconds_per_scene,
+        )
+        logger.info("Fast compose slideshow: %s scenes", len(urls))
+        return "slideshow_fast"
+
     if token and len(urls) > 1:
         try:
             source = await _generate_multi_scene_ai_video(
@@ -210,7 +221,7 @@ async def _generate_multi_scene_ai_video(
     tmp_dir = VIDEOS_DIR / f"_clips_{uuid.uuid4().hex}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
-        for index, image_url in enumerate(image_urls):
+        async def _render_scene(index: int, image_url: str) -> str:
             text = _scene_motion_text(index, scene_texts=scene_texts, fallback_prompt=fallback_prompt)
             emotion = _scene_emotion(index, scene_emotions)
             motion_prompt = build_motion_prompt(text=text, style=style, emotion=emotion)
@@ -226,7 +237,17 @@ async def _generate_multi_scene_ai_video(
                 motion_prompt=motion_prompt,
                 input_image_url=input_image,
             )
-            clip_paths.append(str(clip_path))
+            return str(clip_path)
+
+        if settings.svd_parallel_scenes and len(image_urls) > 1:
+            clip_paths = list(
+                await asyncio.gather(
+                    *[_render_scene(i, url) for i, url in enumerate(image_urls)]
+                )
+            )
+        else:
+            for index, image_url in enumerate(image_urls):
+                clip_paths.append(await _render_scene(index, image_url))
 
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, dir=VIDEOS_DIR) as merged:
             merged_path = merged.name
