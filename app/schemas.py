@@ -211,7 +211,7 @@ class ComposeFilmRequest(BaseModel):
             "examples": [
                 {
                     "image_urls": [
-                        "http://192.168.100.12:8000/media/images/28ea21ae93b240d49428c08c24067d59.png",
+                        "http://192.168.1.20:8000/media/images/28ea21ae93b240d49428c08c24067d59.png",
                     ],
                     "seconds_per_scene": 4.0,
                     "narration_text": "Mira found a magical lantern in the forest.",
